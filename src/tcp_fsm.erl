@@ -11,7 +11,7 @@
 -behaviour(gen_fsm).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, set_socket/2]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
@@ -24,10 +24,11 @@
 %% fsm state record
 -record(state, 
 		{
-		  socket   %% client socket
+		  socket,  %% client socket
+		  addr     %% ip client
 		}).
 
--define(TIMEOUT, 120000).
+-define(TIMEOUT, 10000).
 
 %%%===================================================================
 %%% API
@@ -44,6 +45,9 @@
 %%--------------------------------------------------------------------
 start_link() ->
 	gen_fsm:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+set_socket(Pid, Socket) when is_pid(Pid), is_port(Socket) ->
+    gen_fsm:send_event(Pid, {socket_ready, Socket}).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -63,7 +67,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-	{ok, state_name, #state{}}.
+	{ok, wait_for_socket, #state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -81,21 +85,22 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 
-wait_for_socket({socket_ready, Socket}, State) when is_port(Socket) ->
-    inet:setopts(Socket, [{active, once}, {packet, 2}, binary]),
-    {next_state, wait_for_data, State#state{socket=Socket}, ?TIMEOUT};
+wait_for_socket({socket_ready, Socket}, StateData) when is_port(Socket) ->
+	{ok, {Address, _Port}} = inet:peername(Socket),
+    {next_state, wait_for_data, StateData#state{socket=Socket, addr=Address}, ?TIMEOUT};
 
-wait_for_socket(Other, State) ->
-    error_logger:error_msg("State: wait_for_socket. Unexpected message: ~p\n", [Other]),
-    {next_state, wait_for_socket, State}.
+wait_for_socket(Other, StateData) ->
+    error_logger:error_msg("State: wait_for_socket. Unexpected message: ~p~n", [Other]),
+    {next_state, wait_for_socket, StateData}.
 
-wait_for_data(Data, #state{socket=Socket} = State) ->
-    ok = gen_tcp:send(Socket, Data),
-    {next_state, wait_for_data, State, ?TIMEOUT};
+wait_for_data({data, Bin}, #state{socket=Socket} = StateData) ->
+    %% echo to client
+	ok = gen_tcp:send(Socket, Bin),
+    {next_state, wait_for_data, StateData, ?TIMEOUT};
 
-wait_for_data(timeout, State) ->
-    error_logger:error_msg("~p Client connection timeout - closing.\n", [self()]),
-    {stop, normal, State}.
+wait_for_data(timeout, #state{addr=Address} = StateData) ->
+    error_logger:info_msg("~p Client connection timeout - closing.~n", [Address]),
+    {stop, normal, StateData}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -115,9 +120,9 @@ wait_for_data(timeout, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-state_name(_Event, _From, State) ->
-	Reply = ok,
-	{reply, Reply, state_name, State}.
+%state_name(_Event, _From, StateData) ->
+%	Reply = ok,
+%
 
 %%--------------------------------------------------------------------
 %% @private
@@ -132,8 +137,8 @@ state_name(_Event, _From, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_event(_Event, StateName, State) ->
-	{next_state, StateName, State}.
+handle_event(_Event, StateName, StateData) ->
+	{next_state, StateName, StateData}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -151,9 +156,9 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_sync_event(_Event, _From, StateName, State) ->
+handle_sync_event(_Event, _From, StateName, StateData) ->
 	Reply = ok,
-	{reply, Reply, StateName, State}.
+	{reply, Reply, StateName, StateData}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -168,8 +173,16 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, StateName, State) ->
-	{next_state, StateName, State}.
+handle_info({tcp, _Socket, Bin}, StateName, StateData) ->
+    ?MODULE:StateName({data, Bin}, StateData);
+
+handle_info({tcp_closed, _Socket}, _StateName, #state{addr=Address} = StateData) ->
+    error_logger:info_msg("~p Client disconnected.~n", [Address]),
+    {stop, normal, StateData};
+
+handle_info(_Info, StateName, StateData) ->
+    {noreply, StateName, StateData}.
+
 
 %%--------------------------------------------------------------------
 %% @private
