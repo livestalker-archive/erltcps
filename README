@@ -1,1 +1,3 @@
-tets
+Erlang TCP Server using OTP principles.
+This code based on work by Serge Aleynikov <saleyn at gmail.com>.
+http://www.trapexit.org/Building_a_Non-blocking_TCP_server_using_OTP_principles
