@@ -11,13 +11,14 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2, accept/0, stop/0]).
+-export([start_link/1, accept/0, stop/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 		 terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE). 
+-define(LOGIC_MODULE, tcp_fsm).
 
 -record(state, {
                 listener,       %% Listening socket
@@ -35,8 +36,9 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Port, Module) ->
-	gen_server:start_link({local, ?SERVER}, ?MODULE, [Port, Module], []).
+
+start_link(Port) ->
+	gen_server:start_link({local, ?SERVER}, ?MODULE, [Port], []).
 
 accept() ->
 	gen_server:cast(?MODULE, accept).
@@ -60,18 +62,20 @@ stop() ->
 %% @end
 %%--------------------------------------------------------------------
 
-init([Port, Module]) ->
+init([Port]) ->
 	process_flag(trap_exit, true),
 	Options = [binary, 
 			   {packet, 2},
 			   {keepalive, true}],
 	case gen_tcp:listen(Port, Options) of
 		{ok, LSocket} ->
+			%% Create first accepting process
+			
 			{ok, #state{listener = LSocket,
-						module   = Module}};
+						module   = ?LOGIC_MODULE}};
 		{error, Reason} ->
 			{stop, Reason}
-    end.
+   end.
 
 %%--------------------------------------------------------------------
 %% @private
