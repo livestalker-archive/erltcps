@@ -1,29 +1,33 @@
 %%%-------------------------------------------------------------------
-%%% @author Alexey Grebenshchikov alexey@livestalker.net
-%%% @copyright (C) 2010, Alexey Grebenshchikov
+%%% @author LiveStalker alexey@livestalker.net
+%%% @copyright (C) 2010, LiveStalker
 %%% @doc
-%%% TCP Listener
+%%% TCP listener
 %%% @end
-%%% Created :  5 Oct 2010 by Alexey Grebenshchikov
+%%% Created :  5 Oct 2010 by LiveStalker
 %%%-------------------------------------------------------------------
 -module(tcp_listener).
+-author('alexey@livestalker.net').
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, accept/0, stop/0]).
+-export([start_link/1, accept/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 		 terminate/2, code_change/3]).
 
+%%Internal API
+-export([accept_func/1]).
+
 -define(SERVER, ?MODULE). 
 -define(LOGIC_MODULE, tcp_fsm).
 
 -record(state, {
-                listener,       %% Listening socket
-                module          %% FSM handling module
-               }).
+		  listener,       %% Listening socket
+		  module          %% FSM handling module
+		 }).
 
 %%%===================================================================
 %%% API
@@ -33,18 +37,23 @@
 %% @doc
 %% Starts the server
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
+%% @spec start_link(Port::integer()) -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
 
 start_link(Port) ->
 	gen_server:start_link({local, ?SERVER}, ?MODULE, [Port], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Accept connection
+%%
+%% @spec accept() -> ok
+%% @end
+%%--------------------------------------------------------------------
+
 accept() ->
 	gen_server:cast(?MODULE, accept).
-
-stop() ->
-	gen_server:cast(?MODULE, stop).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -63,16 +72,12 @@ stop() ->
 %%--------------------------------------------------------------------
 
 init([Port]) ->
-	process_flag(trap_exit, true),
-	Options = [binary, 
-			   {packet, 2},
-			   {keepalive, true}],
+	Options = [{packet, raw}, {active, once}],
 	case gen_tcp:listen(Port, Options) of
 		{ok, LSocket} ->
 			%% Create first accepting process
-			
-			{ok, #state{listener = LSocket,
-						module   = ?LOGIC_MODULE}};
+			spawn_link(?MODULE, accept_func, [LSocket]),
+			{ok, #state{listener = LSocket, module   = ?LOGIC_MODULE}};
 		{error, Reason} ->
 			{stop, Reason}
    end.
@@ -91,6 +96,7 @@ init([Port]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+
 handle_call(_Request, _From, State) ->
 	Reply = ok,
 	{reply, Reply, State}.
@@ -105,12 +111,10 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(accept, #state{listener = LSocket} = _State) ->
-	{ok, _Socket} = gen_tcp:accept(LSocket),
-	accept();
-handle_cast(stop, _State) ->
-	io:format("stop signal", []),
-	{stop, "test", _State};
+
+handle_cast(accept, #state{listener = LSocket} = State) ->
+	spawn_link(?MODULE, accept_func, [LSocket]),
+	{noreply, State};
 handle_cast(_Msg, State) ->
 	{noreply, State}.
 
@@ -138,6 +142,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+
 terminate(_Reason, #state{listener = LSocket} = _State) ->
 	gen_tcp:close(LSocket),
 	ok.
@@ -150,9 +155,17 @@ terminate(_Reason, #state{listener = LSocket} = _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+
 code_change(_OldVsn, State, _Extra) ->
 	{ok, State}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+accept_func(LSocket) ->
+	{ok, Socket} = gen_tcp:accept(LSocket),
+	error_logger:info_msg("Accept connection: ~p.\n", [Socket]),
+	{ok, Pid} = tcp_client_sup:start_child(),
+	ok = gen_tcp:controlling_process(Socket, Pid),	
+	tcp_fsm:set_socket(Pid, Socket),
+	accept_func(LSocket).

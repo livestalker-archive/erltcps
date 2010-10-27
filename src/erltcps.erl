@@ -1,12 +1,13 @@
 %%%-------------------------------------------------------------------
-%%% @author Alexey Grebenshchikov alexey@livestalker.net
-%%% @copyright (C) 2010, Alexey Grebenshchikov
+%%% @author LiveStalker alexey@livestalker.net
+%%% @copyright (C) 2010, LiveStalker
 %%% @doc
-%%% TCP Listener
+%%% Erlang TCP server
 %%% @end
-%%% Created :  5 Oct 2010 by Alexey Grebenshchikov
+%%% Created :  5 Oct 2010 by LiveStalker
 %%%-------------------------------------------------------------------
 -module(erltcps).
+-author('alexey@livestalker.net').
 
 -behaviour(application).
 
@@ -60,6 +61,15 @@ stop(_State) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Getting application enviroment
+%%
+%% @spec get_app_env(Key::atom(), Default::string()) -> Val | Default
+%% @end
+%%--------------------------------------------------------------------
 get_app_env(Key, Default) ->
     case application:get_env(Key) of
 		{ok, Val} -> Val;

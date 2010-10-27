@@ -36,7 +36,8 @@ start_link() ->
 	supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 start_child() ->
-	supervisor:start_child(tcp_client_sup, []).	
+	supervisor:start_child(tcp_client_sup, []).
+
 %%%===================================================================
 %%% Supervisor callbacks
 %%%===================================================================

@@ -28,7 +28,7 @@
 		  addr     %% ip client
 		}).
 
--define(TIMEOUT, 10000).
+-define(TIMEOUT, 600000).
 
 %%%===================================================================
 %%% API
@@ -44,7 +44,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-	gen_fsm:start_link({local, ?SERVER}, ?MODULE, [], []).
+	gen_fsm:start_link(?MODULE, [], []).
 
 set_socket(Pid, Socket) when is_pid(Pid), is_port(Socket) ->
     gen_fsm:send_event(Pid, {socket_ready, Socket}).
@@ -86,7 +86,9 @@ init([]) ->
 %%--------------------------------------------------------------------
 
 wait_for_socket({socket_ready, Socket}, StateData) when is_port(Socket) ->
+	inet:setopts(Socket, [binary, {packet, raw}, {nodelay, true}, {active, once}, {keepalive, true}]),	
 	{ok, {Address, _Port}} = inet:peername(Socket),
+    error_logger:info_msg("IP: ~p~n", [Address]),
     {next_state, wait_for_data, StateData#state{socket=Socket, addr=Address}, ?TIMEOUT};
 
 wait_for_socket(Other, StateData) ->
@@ -96,11 +98,16 @@ wait_for_socket(Other, StateData) ->
 wait_for_data({data, Bin}, #state{socket=Socket} = StateData) ->
     %% echo to client
 	ok = gen_tcp:send(Socket, Bin),
+	inet:setopts(Socket, [binary, {packet, raw}, {nodelay, true}, {active, once}, {keepalive, true}]),	
     {next_state, wait_for_data, StateData, ?TIMEOUT};
 
 wait_for_data(timeout, #state{addr=Address} = StateData) ->
     error_logger:info_msg("~p Client connection timeout - closing.~n", [Address]),
-    {stop, normal, StateData}.
+    {stop, normal, StateData};
+
+wait_for_data(Other, StateData) ->
+    error_logger:error_msg("State: wait_for_data. Unexpected message: ~p~n", [Other]),
+    {next_state, wait_for_data, StateData}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -174,6 +181,7 @@ handle_sync_event(_Event, _From, StateName, StateData) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({tcp, _Socket, Bin}, StateName, StateData) ->
+	error_logger:info_msg("~p~n", [Bin]),
     ?MODULE:StateName({data, Bin}, StateData);
 
 handle_info({tcp_closed, _Socket}, _StateName, #state{addr=Address} = StateData) ->
@@ -181,7 +189,7 @@ handle_info({tcp_closed, _Socket}, _StateName, #state{addr=Address} = StateData)
     {stop, normal, StateData};
 
 handle_info(_Info, StateName, StateData) ->
-    {noreply, StateName, StateData}.
+    {next_state, StateName, StateData}.
 
 
 %%--------------------------------------------------------------------

@@ -1,13 +1,13 @@
 %%%-------------------------------------------------------------------
-%%% @author Alexey Grebenshchikov alexey@livestalker.net
-%%% @copyright (C) 2010, Alexey Grebenshchikov
+%%% @author LiveStalker alexey@livestalker.net
+%%% @copyright (C) 2010, LiveStalker
 %%% @doc
-%%% TCP Sever Supervisor
+%%% TCP server top supervisor
 %%% @end
-%%% Created :  5 Oct 2010 by Alexey Grebenshchikov
+%%% Created :  5 Oct 2010 by LiveStalker
 %%%-------------------------------------------------------------------
 -module(tcp_server_sup).
--author('alexeylivestalker.net').
+-author('alexey@livestalker.net').
 
 -behaviour(supervisor).
 
@@ -29,7 +29,7 @@
 %% @doc
 %% Starts the supervisor
 %%
-%% @spec start_link(integer) -> {ok, Pid} | ignore | {error, Error}
+%% @spec start_link(Port::integer()) -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
 start_link(Port) ->
@@ -58,12 +58,12 @@ init([Port]) ->
 	
 	%% specification of child processes
 	Spec = [
-			{tcp_listener, 
-			 {tcp_listener, start_link, [Port]}, 
-			 permanent,
-			 2000,
-			 worker,
-			 [tcp_listener]
+			{tcp_listener,                       %% Id
+			 {tcp_listener, start_link, [Port]}, %% StartFunc = {M, F, A}
+			 permanent,                          %% Permanent - child process is always restarted.
+			 2000,                               %% Defines how a child process should be terminated. 2000 - timeout befor terminated.
+			 worker,                             %% Type of child (worker | supervisor).
+			 [tcp_listener]                      %% Callback module, shuld be a list with one element.
 			},
 			{tcp_client_sup,
 			{tcp_client_sup, start_link, []},
