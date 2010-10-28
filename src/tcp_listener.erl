@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, accept/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -51,9 +51,6 @@ start_link(Port) ->
 %% @spec accept() -> ok
 %% @end
 %%--------------------------------------------------------------------
-
-accept() ->
-	gen_server:cast(?MODULE, accept).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -112,9 +109,6 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast(accept, #state{listener = LSocket} = State) ->
-	spawn_link(?MODULE, accept_func, [LSocket]),
-	{noreply, State};
 handle_cast(_Msg, State) ->
 	{noreply, State}.
 
