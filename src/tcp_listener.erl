@@ -69,13 +69,14 @@ start_link(Port) ->
 %%--------------------------------------------------------------------
 
 init([Port]) ->
-	Options = [{packet, raw}, {active, once}],
+	Options = [{packet, raw}, {active, once}, {reuseaddr, true}],
 	case gen_tcp:listen(Port, Options) of
 		{ok, LSocket} ->
 			%% Create first accepting process
 			spawn_link(?MODULE, accept_func, [LSocket]),
 			{ok, #state{listener = LSocket, module   = ?LOGIC_MODULE}};
 		{error, Reason} ->
+			error_logger:error_msg("TCP Listener error start: ~p~n", [Reason]),
 			{stop, Reason}
    end.
 
