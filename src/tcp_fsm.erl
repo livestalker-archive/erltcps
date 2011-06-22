@@ -54,7 +54,6 @@ handle_sync_event(_Event, _From, StateName, StateData) ->
 	{reply, Reply, StateName, StateData}.
 
 handle_info({tcp, _Socket, Bin}, StateName, StateData) ->
-	error_logger:info_msg("~p~n", [Bin]),
     ?MODULE:StateName({data, Bin}, StateData);
 
 handle_info({tcp_closed, _Socket}, _StateName, #state{addr=Address} = StateData) ->
